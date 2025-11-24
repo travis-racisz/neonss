@@ -1,15 +1,16 @@
 #include "vector"
 #include "raylib.h"
 #include "Grid.h"
-#include "random"
 
 std::vector<Vector2> const &Grid::get_tiles()
 {
 	return tiles;
 }
 
-Grid::Grid()
+Grid::Grid(RandomGenerator &rng)
+	: random(rng)
 {
+	regenerate_preview_colors();
 	spawn_food();
 	for (int i = 0; i <= grid_size; i++)
 	{
@@ -30,50 +31,71 @@ Vector2 Grid::to_map(Vector2 position)
 	return Vector2{position.x * 64, position.y * 64};
 }
 
+std::vector<Color> Grid::generate_random_color_batch(int count)
+{
+	std::vector<Color> palette = {RED, GREEN, BLUE};
+	std::vector<Color> batch;
+	batch.reserve(count);
+
+	for (int i = 0; i < count; ++i)
+	{
+		batch.push_back(random.random_color(palette));
+	}
+
+	return batch;
+}
+
+void Grid::regenerate_preview_colors()
+{
+	const int preview_count = 3;
+	preview_colors = generate_random_color_batch(preview_count);
+}
+
 void Grid::spawn_food()
 {
-    std::vector<Color> colors = { RED, GREEN, BLUE };
+	if (preview_colors.empty())
+	{
+		regenerate_preview_colors();
+	}
 
-    // Random engines (you could move these to static/global if you want)
-    std::random_device rd;
-    std::mt19937 gen(rd());
+	std::vector<Color> colors_to_spawn = preview_colors;
+	preview_colors.clear();
 
-    // If grid_size is the number of tiles per side, valid grid indices are [0, grid_size - 1]
-    std::uniform_int_distribution<int> distr(0, grid_size - 1);
-    std::uniform_int_distribution<int> distc(0, static_cast<int>(colors.size()) - 1);
+	const int target_food_count = static_cast<int>(colors_to_spawn.size());
+	int spawned = 0;
+	int safety_attempts = 0;
 
-    int target_food_count = 3;           // how many food pieces to spawn total
-    int safety_attempts   = 0;           // avoid infinite loops on tiny grids
+	while (spawned < target_food_count && safety_attempts < 1000)
+	{
+		safety_attempts++;
 
-    while (static_cast<int>(food.size()) < target_food_count && safety_attempts < 1000)
-    {
-        safety_attempts++;
+		Vector2 grid_cell = random.random_cell(grid_size);
+		int gx = static_cast<int>(grid_cell.x);
+		int gy = static_cast<int>(grid_cell.y);
 
-        int gx = distr(gen);
-        int gy = distr(gen);
+		bool occupied = false;
+		for (const auto &f : food)
+		{
+			Vector2 f_grid = to_grid(f.position);
+			if (static_cast<int>(f_grid.x) == gx && static_cast<int>(f_grid.y) == gy)
+			{
+				occupied = true;
+				break;
+			}
+		}
 
-        // Check if there is already food at this grid location
-        bool occupied = false;
-        for (const auto &f : food)
-        {
-            Vector2 f_grid = to_grid(f.position);  // convert from pixel coords back to grid coords
-            if (static_cast<int>(f_grid.x) == gx && static_cast<int>(f_grid.y) == gy)
-            {
-                occupied = true;
-                break;
-            }
-        }
+		if (occupied)
+		{
+			continue;
+		}
 
-        if (occupied)
-        {
-            continue; // pick another random cell
-        }
+		Color c = colors_to_spawn[spawned];
+		Vector2 map_pos = to_map(Vector2{static_cast<float>(gx), static_cast<float>(gy)});
+		food.push_back(Food{map_pos, c});
+		spawned++;
+	}
 
-        // Choose a random color and place new food
-        Color c = colors[distc(gen)];
-        Vector2 map_pos = to_map(Vector2{ static_cast<float>(gx), static_cast<float>(gy) });
-        food.push_back(Food{ map_pos, c });
-    }
+	regenerate_preview_colors();
 }
 void Grid::remove_food(int i)
 {
@@ -99,4 +121,9 @@ void Grid::update(float delta)
 
 		DrawRectangle(food[i].position.x, food[i].position.y, 64, 64, food[i].color);
 	}
+}
+
+const std::vector<Color> &Grid::get_preview_colors() const
+{
+	return preview_colors;
 }

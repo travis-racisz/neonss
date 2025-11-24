@@ -4,21 +4,11 @@
 
 const int SCREEN_WIDTH = 1280;
 const int SCREEN_HEIGHT = 800;
-Snake::Snake(Grid &grid)
+Snake::Snake(Grid &grid, Points &points)
 	: grid(grid)
+	, points(points)
 {
 	reset();
-	// head = grid.to_map(Vector2{static_cast<float>(grid.get_grid_size() / 2), static_cast<float>(grid.get_grid_size() / 2)});
-	// direction = RIGHT;
-	// for (int i = 0; i <= 3; i++)
-	//{
-
-	// body.push_back(Vector2{
-	////.x = static_cast<float>(rand_x),
-	//.x = float(grid.to_grid(head).x - i) * 64,
-	//.y = float(grid.to_grid(head).y) * 64,
-	//});
-	//}
 }
 
 void Snake::draw_snake()
@@ -44,6 +34,14 @@ std::vector<Snake::BodyCell> Snake::get_body()
 static bool same_color(Color a, Color b)
 {
 	return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+bool Snake::are_opposite(Directions a, Directions b) const
+{
+	return (a == UP && b == DOWN) ||
+		   (a == DOWN && b == UP) ||
+		   (a == LEFT && b == RIGHT) ||
+		   (a == RIGHT && b == LEFT);
 }
 
 void Snake::append_body(Color color)
@@ -83,7 +81,41 @@ void Snake::append_body(Color color)
 	// If we found 3 or more in a row at the end, erase them
 	if (runLength >= k)
 	{
-		body.erase(body.end() - runLength, body.end());
+		animation_playing = true;
+		pending_removals = runLength;
+		removal_timer = 0.0f;
+		move_timer = 0.0f;
+	}
+}
+
+void Snake::update_removal_animation(float delta)
+{
+	if (!animation_playing)
+	{
+		return;
+	}
+
+	removal_timer += delta;
+	if (removal_timer >= removal_interval && pending_removals > 0)
+	{
+		removal_timer = 0.0f;
+		if (!body.empty())
+		{
+			points.set_points(100);
+			body.pop_back();
+			pending_removals--;
+		}
+		else
+		{
+			pending_removals = 0;
+		}
+	}
+
+	if (pending_removals <= 0)
+	{
+		animation_playing = false;
+		pending_removals = 0;
+		removal_timer = 0.0f;
 	}
 }
 
@@ -94,14 +126,14 @@ Directions Snake::get_direction()
 
 void Snake::set_direction(Directions new_direction)
 {
+	Directions reference = direction_queue.empty() ? direction : direction_queue.back();
 
-	if ((new_direction == UP && direction != DOWN) ||
-		(new_direction == DOWN && direction != UP) ||
-		(new_direction == LEFT && direction != RIGHT) ||
-		(new_direction == RIGHT && direction != LEFT))
+	if (new_direction == reference || are_opposite(new_direction, reference))
 	{
-		direction = new_direction;
+		return;
 	}
+
+	direction_queue.push_back(new_direction);
 }
 
 void Snake::reset()
@@ -120,6 +152,7 @@ void Snake::reset()
 	}
 
 	direction = RIGHT;
+	direction_queue.clear();
 	move_timer = 0.0f;
 }
 void Snake::check_body_collision()
@@ -135,6 +168,11 @@ void Snake::check_body_collision()
 
 void Snake::update(float delta)
 {
+	if (animation_playing)
+	{
+		update_removal_animation(delta);
+		return;
+	}
 
 	for (int i = 0; i < grid.food.size(); i++)
 	{
@@ -143,6 +181,12 @@ void Snake::update(float delta)
 		{
 			append_body(grid.food[i].color);
 			grid.remove_food(i);
+			if (animation_playing)
+			{
+				update_removal_animation(delta);
+				return;
+			}
+			break;
 		}
 	}
 	if (IsKeyPressed(KEY_R))
@@ -170,6 +214,12 @@ void Snake::update(float delta)
 		return;
 
 	move_timer = 0.0f;
+
+	if (!direction_queue.empty())
+	{
+		direction = direction_queue.front();
+		direction_queue.pop_front();
+	}
 	Vector2 old_head = head;
 	Vector2 grid_pos = grid.to_grid(head);
 	switch (direction)

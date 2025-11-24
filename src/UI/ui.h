@@ -1,8 +1,17 @@
+#pragma once
 #include "raylib.h"
 #include "string"
+#include "./snake/Snake.h"
+#include "../utils/Points.h"
+#include "./grid/Grid.h"
 
-#ifndef UI
-#define UI
+enum class AppScreen
+{
+    MainMenu,
+    MainGame,
+    Settings,
+    GameOver
+};
 
 class UI
 {
@@ -19,17 +28,17 @@ private:
     };
     int screen_width;
     int screen_height;
+    AppScreen current_screen = AppScreen::MainMenu;
 
 public:
     Vector2 position;
     Anchor anchor;
-
-
-
+    AppScreen get_current_screen();
+    void set_current_screen(AppScreen new_screen);
+    UI();
     void render();
-    void draw_text(const std::string &text, int x, int y, int font_size, Color color);
-    void draw_button(const std::string &label, int x, int y, int height, int width, int font_size, Color bg, Color border, Color font_color, Color hover_color);
-    void draw_panel(int x, int y, int height, int width, Color bg, Color border);
+    void draw_main_menu();
+    void draw_game_ui(const Grid &grid, const Snake &snake, const Points &points);
+    void draw_settings_menu();
+    void draw_game_over_screen();
 };
-
-#endif
